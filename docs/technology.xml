@@ -1,0 +1,28 @@
+<TechnologyStack VERSION="0.2.0">
+  <Runtime>Python 3.12+</Runtime>
+  <Language>Python 3.12</Language>
+
+  <Framework>CustomTkinter 5.2+ (modern themed GUI on tkinter)</Framework>
+
+  <Dependencies>
+    <dep name="httpx" version="0.27+" purpose="Async HTTP client for OpenRouter API calls" />
+    <dep name="openpyxl" version="3.1+" purpose="Excel file generation (.xlsx)" />
+    <dep name="customtkinter" version="5.2+" purpose="Modern dark-themed GUI widgets" />
+  </Dependencies>
+
+  <VersionConstraints>
+    <constraint lib="python" min="3.12.0" max="3.x" reason="Dataclasses, type unions (X | None), modern asyncio" />
+    <constraint lib="httpx" min="0.27.0" max="0.x" reason="Stable async API with timeout and retry" />
+  </VersionConstraints>
+
+  <Tooling>
+    <tool name="bundler" value="pyinstaller" version="6.x" purpose="Build standalone .exe" />
+    <tool name="test-runner" value="pytest" version="9.x" />
+    <tool name="package-manager" value="pip" />
+  </Tooling>
+
+  <ExternalAPIs>
+    <api name="OpenRouter" endpoint="https://openrouter.ai/api/v1/chat/completions" auth="API key via .env or GUI" />
+    <api name="Default Model" value="google/gemini-2.0-flash-001" tier="free" />
+  </ExternalAPIs>
+</TechnologyStack>

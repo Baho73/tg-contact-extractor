@@ -1,0 +1,17 @@
+.env
+config.json
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+*.spec
+.contacts_temp.jsonl
+contacts_*.json
+contacts_*.xlsx
+review_report.md
+.claude/
+result.json
+video_files/
+tg_contact_extractor_spec.md

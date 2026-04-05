@@ -1,0 +1,118 @@
+<KnowledgeGraph>
+  <Project NAME="TG Contact Extractor" VERSION="0.2.0">
+    <keywords>Telegram, parser, contact-extraction, LLM, OpenRouter, Gemini-Flash, JSON, Excel, desktop-app, CustomTkinter, prompt-management</keywords>
+    <annotation>Desktop application for extracting configurable data from Telegram Desktop chat exports using LLM with prompt management, dual output (JSON + Excel), and model benchmarking</annotation>
+
+    <M-CONFIG NAME="Config" TYPE="UTILITY">
+      <purpose>Configuration management: .env, config.json, free models list, exe/dev path resolution</purpose>
+      <path>src/config.py</path>
+      <depends>none</depends>
+      <annotations>
+        <fn-load_config PURPOSE="Load config with .env override" />
+        <fn-save_config PURPOSE="Persist config to disk" />
+        <fn-_app_dir PURPOSE="Resolve exe vs dev root directory" />
+        <fn-_load_dotenv PURPOSE="Parse .env file without external deps" />
+        <type-AppConfig PURPOSE="Dataclass: openrouter_api_key, model, batch_size, max_tokens_per_batch, language" />
+        <const-FREE_MODELS PURPOSE="Benchmarked free OpenRouter models list" />
+      </annotations>
+    </M-CONFIG>
+
+    <M-PARSER NAME="Parser" TYPE="CORE_LOGIC">
+      <purpose>Parse Telegram Desktop JSON export into normalized Message objects</purpose>
+      <path>src/parser.py</path>
+      <depends>none</depends>
+      <annotations>
+        <fn-parse_export PURPOSE="path -> list[Message]" />
+        <fn-_flatten_text PURPOSE="Rich text array -> plain string" />
+        <type-Message PURPOSE="Dataclass: id, date, from_user, from_id, text, reply_to_id" />
+      </annotations>
+    </M-PARSER>
+
+    <M-BATCHER NAME="Batcher" TYPE="CORE_LOGIC">
+      <purpose>Group messages into batches for LLM API calls</purpose>
+      <path>src/batcher.py</path>
+      <depends>M-PARSER</depends>
+      <annotations>
+        <fn-make_batches PURPOSE="Split by count and token limit" />
+        <fn-estimate_tokens PURPOSE="Rough len/4 heuristic" />
+      </annotations>
+    </M-BATCHER>
+
+    <M-EXTRACTOR NAME="Extractor" TYPE="INTEGRATION">
+      <purpose>LLM API integration with configurable prompts and prompt file management</purpose>
+      <path>src/extractor.py</path>
+      <depends>M-CONFIG, M-PARSER</depends>
+      <annotations>
+        <fn-extract_contacts PURPOSE="Process one batch with given system prompt" />
+        <fn-process_all_batches PURPOSE="Async generator with progress" />
+        <fn-list_prompts PURPOSE="List .txt files in prompts/ folder" />
+        <fn-load_prompt PURPOSE="Read prompt text by name" />
+        <fn-save_prompt PURPOSE="Write prompt text to file" />
+        <type-ContactRecord PURPOSE="Dataclass: source_message_id, from_user, context, extracted[]" />
+        <type-ContactField PURPOSE="Dataclass: type (free-form), value" />
+        <const-DEFAULT_PROMPT_NAME PURPOSE="Default prompt filename stem" />
+      </annotations>
+    </M-EXTRACTOR>
+
+    <M-WRITER NAME="Writer" TYPE="DATA_LAYER">
+      <purpose>JSON serialization with metadata (including prompt) and incremental flush</purpose>
+      <path>src/writer.py</path>
+      <depends>M-EXTRACTOR</depends>
+      <annotations>
+        <fn-write_json PURPOSE="Write final JSON with prompt in metadata" />
+        <fn-flush_incremental PURPOSE="Append to temp JSONL" />
+        <type-ExtractionMeta PURPOSE="Dataclass with prompt field" />
+      </annotations>
+    </M-WRITER>
+
+    <M-EXCEL NAME="Excel" TYPE="DATA_LAYER">
+      <purpose>Convert JSON to formatted Excel with dynamic columns, type normalization, summary</purpose>
+      <path>src/to_excel.py</path>
+      <depends>M-WRITER</depends>
+      <annotations>
+        <fn-json_to_excel PURPOSE="JSON -> .xlsx with auto-columns and summary" />
+        <fn-normalize_type PURPOSE="Alias normalization (телеграм->telegram)" />
+        <const-COLUMN_ORDER PURPOSE="Priority column ordering" />
+        <const-TYPE_ALIASES PURPOSE="Type string normalization map" />
+        <fn-main PURPOSE="CLI entry point for standalone JSON->Excel conversion" />
+      </annotations>
+    </M-EXCEL>
+
+    <M-APP NAME="App" TYPE="ENTRY_POINT">
+      <purpose>Tabbed GUI (CustomTkinter) + CLI, dual output JSON+Excel, prompt editor</purpose>
+      <path>src/app.py</path>
+      <depends>M-CONFIG, M-PARSER, M-BATCHER, M-EXTRACTOR, M-WRITER, M-EXCEL</depends>
+      <annotations>
+        <fn-main PURPOSE="CLI with argparse (--prompt, --model)" />
+        <fn-run_pipeline PURPOSE="Async: parse -> batch -> extract -> JSON -> Excel" />
+        <class-AppGUI PURPOSE="Tabbed GUI: Extraction + Prompt tabs" />
+      </annotations>
+    </M-APP>
+
+    <M-BENCH NAME="Benchmark" TYPE="UTILITY">
+      <purpose>Benchmark speed and quality of free OpenRouter models</purpose>
+      <path>benchmark.py</path>
+      <depends>M-CONFIG, M-EXTRACTOR</depends>
+      <annotations>
+        <fn-run_benchmark PURPOSE="Async test all models on sample" />
+        <fn-print_summary PURPOSE="Formatted results table with recommendation" />
+        <type-BenchmarkResult PURPOSE="Dataclass: model_id, time, contacts, valid_json, error" />
+      </annotations>
+    </M-BENCH>
+
+    <!-- Cross-module dependencies -->
+    <CrossLink from="M-APP" to="M-CONFIG" relation="loads configuration at startup" />
+    <CrossLink from="M-APP" to="M-PARSER" relation="calls parse_export" />
+    <CrossLink from="M-APP" to="M-BATCHER" relation="calls make_batches" />
+    <CrossLink from="M-APP" to="M-EXTRACTOR" relation="calls process_all_batches + prompt functions" />
+    <CrossLink from="M-APP" to="M-WRITER" relation="calls write_json" />
+    <CrossLink from="M-APP" to="M-EXCEL" relation="calls json_to_excel" />
+    <CrossLink from="M-EXTRACTOR" to="M-CONFIG" relation="reads API key and model" />
+    <CrossLink from="M-BATCHER" to="M-PARSER" relation="consumes Message" />
+    <CrossLink from="M-WRITER" to="M-EXTRACTOR" relation="consumes ContactRecord" />
+    <CrossLink from="M-EXCEL" to="M-WRITER" relation="reads JSON output" />
+    <CrossLink from="M-BENCH" to="M-CONFIG" relation="reads API key and model list" />
+    <CrossLink from="M-BENCH" to="M-EXTRACTOR" relation="uses load_prompt, _parse_llm_response, OPENROUTER_URL" />
+
+  </Project>
+</KnowledgeGraph>

@@ -1,0 +1,75 @@
+<RequirementsAnalysis VERSION="0.2.0">
+  <UseCases>
+
+    <UC-001>
+      <Actor>User</Actor>
+      <Action>Exports Telegram group chat via Telegram Desktop and provides the JSON export path</Action>
+      <Goal>To supply raw chat data for extraction</Goal>
+      <AcceptanceCriteria>Application accepts a folder path or result.json file and validates its format</AcceptanceCriteria>
+    </UC-001>
+
+    <UC-002>
+      <Actor>User</Actor>
+      <Action>Enters OpenRouter API key (or provides it via .env) and selects a free LLM model</Action>
+      <Goal>To authenticate with the LLM provider and choose the best available free model</Goal>
+      <AcceptanceCriteria>API key loaded from .env > env var > config.json; model selector shows benchmarked free models; choice persisted</AcceptanceCriteria>
+    </UC-002>
+
+    <UC-003>
+      <Actor>System</Actor>
+      <Action>Parses result.json into a list of Message objects</Action>
+      <Goal>To normalize Telegram export data into a uniform internal format</Goal>
+      <AcceptanceCriteria>All text messages extracted; rich text flattened; service/empty messages skipped</AcceptanceCriteria>
+    </UC-003>
+
+    <UC-004>
+      <Actor>System</Actor>
+      <Action>Groups messages into batches by count and token limit</Action>
+      <Goal>To prepare optimal payloads for LLM API calls</Goal>
+      <AcceptanceCriteria>Batches respect batch_size and max_tokens limits</AcceptanceCriteria>
+    </UC-004>
+
+    <UC-005>
+      <Actor>System</Actor>
+      <Action>Sends message batches to OpenRouter API using a user-selected system prompt and parses structured JSON responses</Action>
+      <Goal>To extract data from chat messages using LLM with configurable extraction logic</Goal>
+      <AcceptanceCriteria>Extraction driven by system prompt from prompts/ folder; {type, value} pairs; retry on 429/timeout/invalid JSON</AcceptanceCriteria>
+    </UC-005>
+
+    <UC-006>
+      <Actor>System</Actor>
+      <Action>Writes extracted data to JSON file with metadata including the prompt used</Action>
+      <Goal>To produce structured JSON output with full traceability</Goal>
+      <AcceptanceCriteria>JSON contains extraction_meta (source, counts, date, prompt text) and contacts array</AcceptanceCriteria>
+    </UC-006>
+
+    <UC-007>
+      <Actor>System</Actor>
+      <Action>Converts JSON output to formatted Excel with type normalization, auto-columns, and summary sheet</Action>
+      <Goal>To produce a human-readable table with all extracted data</Goal>
+      <AcceptanceCriteria>Excel has dynamic columns from discovered types; zebra striping; auto-filter; summary sheet with stats and prompt</AcceptanceCriteria>
+    </UC-007>
+
+    <UC-008>
+      <Actor>User</Actor>
+      <Action>Selects, edits, and saves system prompts via GUI tab or CLI flag</Action>
+      <Goal>To customize what data is extracted without changing code</Goal>
+      <AcceptanceCriteria>Prompts stored as .txt in prompts/; GUI has editor tab with load/save/select; CLI accepts --prompt flag</AcceptanceCriteria>
+    </UC-008>
+
+    <UC-009>
+      <Actor>User</Actor>
+      <Action>Launches tabbed GUI (CustomTkinter) or CLI, monitors progress, opens JSON/Excel results</Action>
+      <Goal>To process exports with visual feedback and dual output</Goal>
+      <AcceptanceCriteria>GUI tabs: Extraction + Prompt; dual output buttons (JSON, Excel); CLI with progress bar; .exe packaging</AcceptanceCriteria>
+    </UC-009>
+
+    <UC-010>
+      <Actor>User</Actor>
+      <Action>Runs benchmark to compare speed and quality of free LLM models</Action>
+      <Goal>To choose the optimal model for extraction</Goal>
+      <AcceptanceCriteria>Benchmark tests all free models on sample data; reports time, contact count, types; recommends best model</AcceptanceCriteria>
+    </UC-010>
+
+  </UseCases>
+</RequirementsAnalysis>

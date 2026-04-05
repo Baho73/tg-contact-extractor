@@ -1,0 +1,212 @@
+<DevelopmentPlan VERSION="0.2.0">
+  <Modules>
+
+    <M-CONFIG NAME="Config" TYPE="UTILITY" LAYER="0" ORDER="1">
+      <contract>
+        <purpose>Load, validate, and persist configuration; support .env, config.json, and exe/dev path resolution</purpose>
+        <inputs>
+          <param name="config_path" type="Path | None" />
+          <param name="env_path" type="Path | None | ..." description="...=default, None=skip .env" />
+        </inputs>
+        <outputs>
+          <param name="config" type="AppConfig" />
+        </outputs>
+        <errors>
+          <error code="CONFIG_INVALID" description="JSON parse error or missing fields" />
+        </errors>
+      </contract>
+      <interface>
+        <export-load_config PURPOSE="Load config from disk + .env override" />
+        <export-save_config PURPOSE="Persist config to disk" />
+        <export-AppConfig PURPOSE="Dataclass: openrouter_api_key, model, batch_size, max_tokens_per_batch, language" />
+        <export-FREE_MODELS PURPOSE="List of benchmarked free OpenRouter models" />
+      </interface>
+      <depends>none</depends>
+    </M-CONFIG>
+
+    <M-PARSER NAME="Parser" TYPE="CORE_LOGIC" LAYER="0" ORDER="2">
+      <contract>
+        <purpose>Parse Telegram Desktop JSON export into normalized Message objects</purpose>
+        <inputs><param name="path" type="Path" /></inputs>
+        <outputs><param name="messages" type="list[Message]" /></outputs>
+        <errors>
+          <error code="FILE_NOT_FOUND" />
+          <error code="INVALID_FORMAT" />
+        </errors>
+      </contract>
+      <interface>
+        <export-parse_export PURPOSE="path -> list[Message]" />
+        <export-Message PURPOSE="Dataclass: id, date, from_user, from_id, text, reply_to_id" />
+      </interface>
+      <depends>none</depends>
+    </M-PARSER>
+
+    <M-BATCHER NAME="Batcher" TYPE="CORE_LOGIC" LAYER="1" ORDER="1">
+      <contract>
+        <purpose>Group messages into batches respecting count and token limits</purpose>
+        <inputs>
+          <param name="messages" type="list[Message]" />
+          <param name="batch_size" type="int" />
+          <param name="max_tokens" type="int" />
+        </inputs>
+        <outputs><param name="batches" type="list[list[Message]]" /></outputs>
+      </contract>
+      <interface>
+        <export-make_batches PURPOSE="Split messages into sized batches" />
+        <export-estimate_tokens PURPOSE="Rough token count heuristic" />
+      </interface>
+      <depends>M-PARSER</depends>
+    </M-BATCHER>
+
+    <M-EXTRACTOR NAME="Extractor" TYPE="INTEGRATION" LAYER="2" ORDER="1">
+      <contract>
+        <purpose>Send batches to OpenRouter API with configurable system prompt; manage prompt files</purpose>
+        <inputs>
+          <param name="batch" type="list[Message]" />
+          <param name="config" type="AppConfig" />
+          <param name="client" type="httpx.AsyncClient" />
+          <param name="system_prompt" type="str | None" />
+        </inputs>
+        <outputs><param name="contacts" type="list[ContactRecord]" /></outputs>
+        <errors>
+          <error code="RATE_LIMITED" description="429 — exponential backoff" />
+          <error code="INVALID_RESPONSE" description="Bad JSON — retry 2x then skip" />
+          <error code="TIMEOUT" description="Retry with 2x timeout" />
+        </errors>
+      </contract>
+      <interface>
+        <export-extract_contacts PURPOSE="Process one batch with given prompt" />
+        <export-process_all_batches PURPOSE="Async generator yielding (index, contacts, failed_ids)" />
+        <export-ContactRecord PURPOSE="Dataclass: source_message_id, from_user, context, extracted[]" />
+        <export-ContactField PURPOSE="Dataclass: type, value" />
+        <export-list_prompts PURPOSE="List saved prompt names from prompts/ folder" />
+        <export-load_prompt PURPOSE="Load prompt text by name" />
+        <export-save_prompt PURPOSE="Save prompt text to file" />
+        <export-DEFAULT_PROMPT_NAME PURPOSE="Name of the default prompt file" />
+      </interface>
+      <depends>M-CONFIG, M-PARSER</depends>
+    </M-EXTRACTOR>
+
+    <M-WRITER NAME="Writer" TYPE="DATA_LAYER" LAYER="3" ORDER="1">
+      <contract>
+        <purpose>Serialize contacts to JSON with metadata (including prompt used) and incremental flush</purpose>
+        <inputs>
+          <param name="contacts" type="list[ContactRecord]" />
+          <param name="meta" type="ExtractionMeta" description="Includes prompt field" />
+          <param name="output_path" type="Path" />
+        </inputs>
+        <outputs><param name="path" type="Path" /></outputs>
+      </contract>
+      <interface>
+        <export-write_json PURPOSE="Write final JSON with contacts, metadata, and prompt" />
+        <export-flush_incremental PURPOSE="Append to temp JSONL for crash recovery" />
+        <export-ExtractionMeta PURPOSE="Dataclass: source, total_messages, processed_batches, skipped_batches, date, prompt" />
+      </interface>
+      <depends>M-EXTRACTOR</depends>
+    </M-WRITER>
+
+    <M-EXCEL NAME="Excel" TYPE="DATA_LAYER" LAYER="4" ORDER="1">
+      <contract>
+        <purpose>Convert contacts JSON to formatted Excel with dynamic columns, type normalization, and summary sheet</purpose>
+        <inputs>
+          <param name="json_path" type="Path" />
+          <param name="output_path" type="Path | None" />
+        </inputs>
+        <outputs><param name="xlsx_path" type="Path" /></outputs>
+      </contract>
+      <interface>
+        <export-json_to_excel PURPOSE="JSON -> formatted .xlsx with auto-columns and summary" />
+        <export-normalize_type PURPOSE="Normalize type aliases (телеграм->telegram, etc.)" />
+        <export-COLUMN_ORDER PURPOSE="Priority order for known column types" />
+      </interface>
+      <depends>M-WRITER</depends>
+    </M-EXCEL>
+
+    <M-APP NAME="App" TYPE="ENTRY_POINT" LAYER="5" ORDER="1">
+      <contract>
+        <purpose>Tabbed GUI (CustomTkinter) + CLI orchestrating full pipeline with prompt management and dual output</purpose>
+        <inputs><param name="args" type="CLI args or GUI input" /></inputs>
+        <outputs><param name="result" type="JSON + Excel files" /></outputs>
+      </contract>
+      <interface>
+        <export-main PURPOSE="CLI entry point with argparse (--prompt, --model, --api-key)" />
+        <export-AppGUI PURPOSE="Tabbed GUI: Extraction tab + Prompt tab" />
+        <export-run_pipeline PURPOSE="Async: parse -> batch -> extract -> write JSON -> write Excel" />
+      </interface>
+      <depends>M-CONFIG, M-PARSER, M-BATCHER, M-EXTRACTOR, M-WRITER, M-EXCEL</depends>
+    </M-APP>
+
+    <M-BENCH NAME="Benchmark" TYPE="UTILITY" LAYER="2" ORDER="2">
+      <contract>
+        <purpose>Test speed and quality of all free OpenRouter models on a sample batch</purpose>
+        <inputs><param name="api_key" type="str" /></inputs>
+        <outputs><param name="results" type="list[BenchmarkResult]" /></outputs>
+      </contract>
+      <interface>
+        <export-run_benchmark PURPOSE="Async benchmark of all FREE_MODELS" />
+        <export-BenchmarkResult PURPOSE="Dataclass: model_id, time, contacts_found, valid_json, error" />
+        <export-main PURPOSE="CLI entry point" />
+      </interface>
+      <depends>M-CONFIG, M-EXTRACTOR</depends>
+    </M-BENCH>
+
+  </Modules>
+
+  <DataFlow>
+
+    <DF-MAIN NAME="Main extraction pipeline" TRIGGER="User clicks Start / runs CLI">
+      <step-1>M-APP reads prompt from GUI editor or CLI --prompt flag</step-1>
+      <step-2>M-CONFIG.load_config() with .env override</step-2>
+      <step-3>M-PARSER.parse_export(path) -> list[Message]</step-3>
+      <step-4>M-BATCHER.make_batches(messages) -> list[list[Message]]</step-4>
+      <step-5>M-EXTRACTOR.process_all_batches(batches, config, prompt) -> yields contacts</step-5>
+      <step-6>M-WRITER.write_json(contacts, meta_with_prompt) -> JSON file</step-6>
+      <step-7>M-EXCEL.json_to_excel(json_path) -> Excel file</step-7>
+      <step-8>M-APP shows dual result buttons (JSON + Excel)</step-8>
+    </DF-MAIN>
+
+    <DF-PROMPT NAME="Prompt management flow" TRIGGER="User switches to Prompt tab">
+      <step-1>M-EXTRACTOR.list_prompts() -> populate dropdown</step-1>
+      <step-2>User selects prompt -> M-EXTRACTOR.load_prompt(name) -> text in editor</step-2>
+      <step-3>User edits text, enters name, clicks Save</step-3>
+      <step-4>M-EXTRACTOR.save_prompt(name, text) -> prompts/name.txt</step-4>
+      <step-5>Dropdown refreshed with new entry</step-5>
+    </DF-PROMPT>
+
+    <DF-RETRY NAME="LLM error retry flow" TRIGGER="API error">
+      <step-1>429 -> exponential backoff + jitter</step-1>
+      <step-2>Invalid JSON -> retry up to 2x</step-2>
+      <step-3>Timeout -> retry with 2x timeout</step-3>
+      <step-4>All exhausted -> skip batch, log to meta.skipped_batches</step-4>
+    </DF-RETRY>
+
+    <DF-CONFIG NAME="Configuration loading" TRIGGER="App startup">
+      <step-1>M-CONFIG._app_dir() resolves exe vs dev path</step-1>
+      <step-2>Load config.json (create default if missing)</step-2>
+      <step-3>Override API key from .env or OS env var if present</step-3>
+    </DF-CONFIG>
+
+  </DataFlow>
+
+  <ImplementationOrder>
+    <Phase-1 name="Foundation" status="done">
+      <step-1 module="M-CONFIG">Config with .env, free models, app_dir</step-1>
+      <step-2 module="M-PARSER">Telegram JSON parsing, Message, rich text</step-2>
+    </Phase-1>
+
+    <Phase-2 name="Processing" status="done">
+      <step-1 module="M-BATCHER">Batch grouping</step-1>
+      <step-2 module="M-EXTRACTOR">LLM API + prompt management</step-2>
+    </Phase-2>
+
+    <Phase-3 name="Output" status="done">
+      <step-1 module="M-WRITER">JSON with prompt in metadata</step-1>
+      <step-2 module="M-EXCEL">JSON to Excel converter</step-2>
+    </Phase-3>
+
+    <Phase-4 name="Interface" status="done">
+      <step-1 module="M-APP">Tabbed GUI + CLI + dual output</step-1>
+      <step-2 module="M-BENCH">Model benchmark</step-2>
+    </Phase-4>
+  </ImplementationOrder>
+</DevelopmentPlan>
