@@ -56,7 +56,7 @@ python -m src.app ./ChatExport/result.json --api-key sk-or-... --prompt vacancie
 
 ```
 +------------------------------------------+
-|  TG Contact Extractor            v2.0    |
+|  TG Contact Extractor            v3.0    |
 |  Извлечение данных из экспорта Telegram   |
 |                                          |
 |  [Извлечение]  [Промпт]                 |

@@ -43,8 +43,6 @@ from src.writer import ExtractionMeta, flush_incremental, write_json
 
 logger = logging.getLogger(__name__)
 
-FLUSH_EVERY = 10
-
 # START_BLOCK_THEME_COLORS
 COLOR_BG = "#0f1117"
 COLOR_SURFACE = "#1a1d27"
@@ -102,8 +100,9 @@ async def run_pipeline(
             skipped.append(failed_ids)
         done += 1
         _report(done, total, f"Пакет {done}/{total} — извлечено {len(contacts)} контактов")
-        if done % FLUSH_EVERY == 0:
-            flush_incremental(contacts, temp_path)
+        # append every batch to the crash-recovery log
+        # (was: only every 10th batch, which silently dropped ~90% of progress on crash)
+        flush_incremental(contacts, temp_path)
     # END_BLOCK_PIPELINE_EXTRACT
 
     # START_BLOCK_PIPELINE_WRITE
@@ -164,7 +163,7 @@ class AppGUI:
         ).pack(side="left")
 
         ctk.CTkLabel(
-            header, text="v2.0",
+            header, text="v3.0",
             font=ctk.CTkFont(size=12), text_color=COLOR_TEXT_DIM,
         ).pack(side="left", padx=(8, 0), pady=(6, 0))
 
